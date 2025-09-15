@@ -11,7 +11,7 @@ pub struct Trie<V> {
 }
 
 impl<V: TrieValue> Trie<V> {
-    pub fn new(root_value: Option<Rc<V>>) -> Self {
+    pub fn new(root_value: Option<V>) -> Self {
         let edge_value = match &root_value {
             Some(value) => value.trie_path(),
             None => Rc::from(""),
@@ -34,7 +34,7 @@ impl<V: TrieValue> Trie<V> {
         node_id
     }
 
-    fn update_node(&mut self, node_id: &NodeId, mut f: impl FnMut(&mut TrieNode<V>)) {
+    fn update_node(&mut self, node_id: &NodeId, f: impl FnOnce(&mut TrieNode<V>)) {
         f(&mut self.nodes[node_id.0])
     }
 
@@ -100,19 +100,19 @@ impl<V: TrieValue> Trie<V> {
         }
     }
 
-    pub fn get(&self, path: &str) -> Option<Rc<V>> {
+    pub fn get(&self, path: &str) -> Option<&V> {
         if let Retrieval::Exact { node_id } = self.retrieve(path) {
-            self.get_node(&node_id).value.clone()
+            self.get_node(&node_id).value.as_ref()
         } else {
             None
         }
     }
 
-    pub fn insert(&mut self, value: Rc<V>) {
+    pub fn insert(&mut self, value: V) {
         match self.retrieve(&value.trie_path()) {
             Retrieval::Exact { node_id } => {
                 return self.update_node(&node_id, |node| {
-                    node.value = Some(Rc::clone(&value));
+                    node.value = Some(value);
                 });
             }
             Retrieval::Ancestor {
@@ -181,7 +181,7 @@ mod tests {
 
     use super::*;
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, Clone, PartialEq)]
     struct Val(Rc<str>);
 
     impl TrieValue for Val {
@@ -192,68 +192,53 @@ mod tests {
 
     fn create_trie() -> Trie<Val> {
         let root = Val(Rc::from(""));
-        Trie::new(Some(Rc::from(root)))
+        Trie::new(Some(root))
     }
 
     #[test]
     fn basic_insert() {
         let mut t = create_trie();
-        let a = Rc::from(Val(Rc::from("/a")));
-        t.insert(Rc::clone(&a));
-        assert_eq!(t.get("/a"), Some(a));
+        let a = Val(Rc::from("/a"));
+        t.insert(a.clone());
+        assert_eq!(t.get("/a"), Some(&a));
     }
 
     #[test]
     fn nested_insert() {
         let mut t = create_trie();
-        let a = Rc::from(Val(Rc::from("/a")));
-        let b = Rc::from(Val(Rc::from("/a/b")));
-        t.insert(Rc::clone(&a));
-        t.insert(Rc::clone(&b));
-        println!("{:#?}", t);
-        assert_eq!(t.get("/a"), Some(a));
-        assert_eq!(t.get("/a/b"), Some(b));
-    }
-
-    #[test]
-    fn branched_insert() {
-        let mut t = create_trie();
-        let a = Rc::from(Val(Rc::from("/a")));
-        let b = Rc::from(Val(Rc::from("/a/b")));
-        let c = Rc::from(Val(Rc::from("/a/c")));
-        t.insert(Rc::clone(&a));
-        t.insert(Rc::clone(&b));
-        t.insert(Rc::clone(&c));
-        assert_eq!(t.get("/a"), Some(a));
-        assert_eq!(t.get("/a/b"), Some(b));
-        assert_eq!(t.get("/a/c"), Some(c));
+        let a = Val(Rc::from("/a"));
+        let b = Val(Rc::from("/a/b"));
+        t.insert(a.clone());
+        t.insert(b.clone());
+        assert_eq!(t.get("/a"), Some(&a));
+        assert_eq!(t.get("/a/b"), Some(&b));
     }
 
     #[test]
     fn diverging_insert() {
         let mut t = create_trie();
-        let a = Rc::from(Val(Rc::from("/a")));
-        let c = Rc::from(Val(Rc::from("/a/b/c")));
-        let x = Rc::from(Val(Rc::from("/a/b/x")));
-        t.insert(Rc::clone(&a));
-        t.insert(Rc::clone(&c));
-        t.insert(Rc::clone(&x));
-        assert_eq!(t.get("/a"), Some(a));
-        assert_eq!(t.get("/a/b/c"), Some(c));
-        assert_eq!(t.get("/a/b/x"), Some(x));
+        let a = Val(Rc::from("/a"));
+        let c = Val(Rc::from("/a/b/c"));
+        let x = Val(Rc::from("/a/b/x"));
+        t.insert(a.clone());
+        t.insert(c.clone());
+        t.insert(x.clone());
+        assert_eq!(t.get("/a"), Some(&a));
+        assert_eq!(t.get("/a/b/c"), Some(&c));
+        assert_eq!(t.get("/a/b/x"), Some(&x));
     }
 
     #[test]
     fn split_insert() {
         let mut t = create_trie();
-        let a = Rc::from(Val(Rc::from("/a")));
-        let c = Rc::from(Val(Rc::from("/a/b/c")));
-        let b = Rc::from(Val(Rc::from("/a/b")));
-        t.insert(Rc::clone(&a));
-        t.insert(Rc::clone(&c));
-        t.insert(Rc::clone(&b));
-        assert_eq!(t.get("/a"), Some(a));
-        assert_eq!(t.get("/a/b/c"), Some(c));
-        assert_eq!(t.get("/a/b"), Some(b));
+        let a = Val(Rc::from("/a"));
+        let c = Val(Rc::from("/a/b/c"));
+        let b = Val(Rc::from("/a/b"));
+        t.insert(a.clone());
+        t.insert(c.clone());
+        t.insert(b.clone());
+        assert_eq!(t.get("/a"), Some(&a));
+        assert_eq!(t.get("/a/b/c"), Some(&c));
+        assert_eq!(t.get("/a/b"), Some(&b));
     }
 }

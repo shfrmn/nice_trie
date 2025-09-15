@@ -10,7 +10,7 @@ pub struct NodeId(pub usize);
 pub struct TrieNode<V> {
     pub edge: Rc<str>,
     pub children: HashMap<u8, NodeId>,
-    pub value: Option<Rc<V>>,
+    pub value: Option<V>,
 }
 
 impl<V: Debug> Debug for TrieNode<V> {
@@ -28,7 +28,7 @@ impl<V: Debug> Debug for TrieNode<V> {
 }
 
 impl<V: TrieValue> TrieNode<V> {
-    pub fn new(edge: Edge, value: Option<Rc<V>>) -> Self {
+    pub fn new(edge: Edge, value: Option<V>) -> Self {
         TrieNode {
             edge: edge.0,
             children: HashMap::new(),
