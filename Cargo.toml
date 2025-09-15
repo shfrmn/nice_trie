@@ -1,0 +1,10 @@
+[package]
+name = "nice_trie"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "nice_trie"
+path = "src/lib.rs"
+
+[dependencies]
