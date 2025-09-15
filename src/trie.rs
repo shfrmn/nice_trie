@@ -38,7 +38,7 @@ impl<V: TrieValue> Trie<V> {
         f(&mut self.nodes[node_id.0])
     }
 
-    fn retrieve<'a>(&'a self, path: &'a str) -> Retrieval {
+    fn retrieve(&self, path: &str) -> Retrieval {
         let mut current_node_id = NodeId(0);
         let mut current_node = self.root();
         let mut leaf_edge_value = path.trim_matches('/');
