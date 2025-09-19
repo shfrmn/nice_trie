@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
-pub trait TrieValue {
-    fn trie_path(&self) -> Rc<str>;
+pub trait TrieValue<'v, E: 'v + ?Sized> {
+    fn trie_path(&'v self) -> E;
 }

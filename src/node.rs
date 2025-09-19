@@ -1,46 +1,39 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
-use std::{collections::HashMap, rc::Rc};
+use std::hash::Hash;
 
 use crate::edge::Edge;
-use crate::value::TrieValue;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct NodeId(pub usize);
 
-pub struct TrieNode<V> {
-    pub edge: Rc<str>,
-    pub children: HashMap<u8, NodeId>,
-    pub value: Option<V>,
-}
-
-impl<V: Debug> Debug for TrieNode<V> {
+impl Debug for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut children = HashMap::new();
-        for (first_byte, value) in &self.children {
-            children.insert(*first_byte as char, value);
-        }
-        f.debug_struct("TrieNode")
-            .field("edge", &self.edge)
-            .field("children", &children)
-            .field("value", &self.value)
-            .finish()
+        write!(f, "{}", self.0)
     }
 }
 
-impl<V: TrieValue> TrieNode<V> {
-    pub fn new(edge: Edge, value: Option<V>) -> Self {
+#[derive(Debug)]
+pub struct TrieNode<Value, Segment: Eq + Hash> {
+    pub edge: Edge<Segment>,
+    pub children: HashMap<Segment, NodeId>,
+    pub value: Option<Value>,
+}
+
+impl<'s, Value, Segment: Eq + Hash> TrieNode<Value, Segment> {
+    pub fn new(edge: Edge<Segment>, value: Option<Value>) -> Self {
         TrieNode {
-            edge: edge.0,
+            edge,
             children: HashMap::new(),
             value,
         }
     }
 
-    pub fn route(&self, remainder: &str) -> Option<&NodeId> {
-        self.children.get(&remainder.as_bytes()[0])
+    pub fn route(&self, segment: &Segment) -> Option<&NodeId> {
+        self.children.get(segment)
     }
 
-    pub fn insert_edge(&mut self, byte_prefix: u8, node_id: NodeId) {
-        self.children.insert(byte_prefix, node_id);
+    pub fn insert_edge(&mut self, segment: Segment, node_id: NodeId) {
+        self.children.insert(segment, node_id);
     }
 }

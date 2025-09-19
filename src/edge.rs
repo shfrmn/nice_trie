@@ -1,14 +1,78 @@
-use std::rc::Rc;
+use std::fmt::Debug;
 
-#[derive(Debug)]
-pub struct Edge(pub Rc<str>);
+pub struct Edge<Segment>(Vec<Segment>);
 
-impl Edge {
-    pub fn new(edge_value: Rc<str>) -> Self {
-        Edge(edge_value)
+impl<Segment: Eq> Edge<Segment> {
+    pub fn empty() -> Self {
+        Edge(Vec::new())
     }
 
-    pub fn get_byte_prefix(&self) -> u8 {
-        self.0.as_bytes()[0]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn first(&self) -> &Segment {
+        &self.0[0]
+    }
+
+    pub fn common_prefix_len(&self, edge_like: &[Segment]) -> usize {
+        let mut edge_iter = edge_like.into_iter();
+        let mut prefix_len = 0;
+        while edge_iter
+            .next()
+            .is_some_and(|s| prefix_len < self.len() && *s == self.0[prefix_len])
+        {
+            prefix_len += 1;
+        }
+        prefix_len
+    }
+
+    pub fn is_prefix_of(&self, edge_like: &[Segment]) -> bool {
+        self.common_prefix_len(edge_like) == self.len()
+    }
+
+    /// Removes the prefix of the given length from the edge and returns it
+    pub fn remove_prefix(&mut self, prefix_len: usize) -> Self {
+        let mut result = self.0.split_off(prefix_len);
+        std::mem::swap(&mut self.0, &mut result);
+        Edge(result)
+    }
+}
+
+impl<Segment> AsRef<[Segment]> for Edge<Segment> {
+    fn as_ref(&self) -> &[Segment] {
+        self.0.as_ref()
+    }
+}
+
+impl<Segment> FromIterator<Segment> for Edge<Segment> {
+    fn from_iter<P: IntoIterator<Item = Segment>>(path_iter: P) -> Self {
+        Edge(path_iter.into_iter().collect())
+    }
+}
+
+impl<Segment> IntoIterator for Edge<Segment> {
+    type Item = Segment;
+
+    type IntoIter = std::vec::IntoIter<Segment>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, Segment> IntoIterator for &'a Edge<Segment> {
+    type Item = &'a Segment;
+
+    type IntoIter = std::slice::Iter<'a, Segment>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<Segment: Debug> Debug for Edge<Segment> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
     }
 }
