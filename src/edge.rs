@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt::Debug;
 
 pub struct Edge<Segment>(Vec<Segment>);
@@ -39,9 +40,9 @@ impl<Segment: Eq> Edge<Segment> {
     }
 }
 
-impl<Segment> AsRef<[Segment]> for Edge<Segment> {
-    fn as_ref(&self) -> &[Segment] {
-        self.0.as_ref()
+impl<Segment> Borrow<[Segment]> for Edge<Segment> {
+    fn borrow(&self) -> &[Segment] {
+        self.0.borrow()
     }
 }
 

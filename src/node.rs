@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
 
 use crate::edge::Edge;
+use crate::key::IntoEdge;
+use crate::radix::Radix;
 
 #[derive(Clone, Copy)]
 pub struct NodeId(pub usize);
@@ -14,26 +14,26 @@ impl Debug for NodeId {
 }
 
 #[derive(Debug)]
-pub struct TrieNode<Value, Segment: Eq + Hash> {
-    pub edge: Edge<Segment>,
-    pub children: HashMap<Segment, NodeId>,
-    pub value: Option<Value>,
+pub struct TrieNode<'k, K, V, E: IntoEdge<'k, K>, R: Radix<E::Segment>> {
+    pub edge: Edge<E::Segment>,
+    pub radix: R,
+    pub value: Option<V>,
 }
 
-impl<'s, Value, Segment: Eq + Hash> TrieNode<Value, Segment> {
-    pub fn new(edge: Edge<Segment>, value: Option<Value>) -> Self {
+impl<'k, K, V, E: IntoEdge<'k, K>, R: Radix<E::Segment>> TrieNode<'k, K, V, E, R> {
+    pub fn new(edge: Edge<E::Segment>, value: Option<V>) -> Self {
         TrieNode {
             edge,
-            children: HashMap::new(),
+            radix: R::default(),
             value,
         }
     }
 
-    pub fn route(&self, segment: &Segment) -> Option<&NodeId> {
-        self.children.get(segment)
+    pub fn route(&self, segment: &E::Segment) -> Option<&NodeId> {
+        self.radix.get(segment)
     }
 
-    pub fn insert_edge(&mut self, segment: Segment, node_id: NodeId) {
-        self.children.insert(segment, node_id);
+    pub fn insert_edge(&mut self, segment: E::Segment, node_id: NodeId) {
+        self.radix.insert(segment, node_id);
     }
 }

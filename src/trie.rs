@@ -1,45 +1,48 @@
+use std::borrow::Borrow;
+
 use crate::edge::Edge;
+use crate::key::IntoEdge;
 use crate::node::{NodeId, TrieNode};
 use crate::radix::Radix;
 use crate::retrieval::Retrieval;
 
 #[derive(Debug)]
-pub struct Trie<'p, Path, Val, Rad: Radix<'p, Path>> {
-    nodes: Vec<TrieNode<Val, Rad::Segment>>,
-    radix: Rad,
+pub struct Trie<'k, K, V, E: IntoEdge<'k, K>, R: Radix<E::Segment>> {
+    nodes: Vec<TrieNode<'k, K, V, E, R>>,
+    encoder: E,
 }
 
-impl<'p, Path, Val, Rad: Radix<'p, Path>> Trie<'p, Path, Val, Rad> {
-    pub fn new(radix: Rad) -> Self {
+impl<'k, K, V, E: IntoEdge<'k, K>, R: Radix<E::Segment>> Trie<'k, K, V, E, R> {
+    pub fn new(encoder: E) -> Self {
         let root = TrieNode::new(Edge::empty(), None);
         Trie {
             nodes: vec![root],
-            radix,
+            encoder,
         }
     }
 
-    fn root(&self) -> &TrieNode<Val, Rad::Segment> {
+    fn root(&self) -> &TrieNode<'k, K, V, E, R> {
         &self.nodes[0]
     }
 
-    fn get_node(&self, node_id: &NodeId) -> &TrieNode<Val, Rad::Segment> {
+    fn get_node(&self, node_id: &NodeId) -> &TrieNode<'k, K, V, E, R> {
         &self.nodes[node_id.0]
     }
 
-    fn insert_node(&mut self, node: TrieNode<Val, Rad::Segment>) -> NodeId {
+    fn insert_node(&mut self, node: TrieNode<'k, K, V, E, R>) -> NodeId {
         let node_id = NodeId(self.nodes.len());
         self.nodes.push(node);
         node_id
     }
 
-    fn update_node(&mut self, node_id: &NodeId, f: impl FnOnce(&mut TrieNode<Val, Rad::Segment>)) {
+    fn update_node(&mut self, node_id: &NodeId, f: impl FnOnce(&mut TrieNode<'k, K, V, E, R>)) {
         f(&mut self.nodes[node_id.0])
     }
 
-    fn retrieve(&self, path_edge: &Edge<Rad::Segment>, exact_only: bool) -> Retrieval {
+    fn retrieve(&self, path_edge: &Edge<E::Segment>, exact_only: bool) -> Retrieval {
         let mut current_node_id = NodeId(0);
         let mut current_node = self.root();
-        let mut leaf_segments = path_edge.as_ref();
+        let mut leaf_segments: &[_] = path_edge.borrow();
         while !leaf_segments.is_empty() && current_node.edge.is_prefix_of(leaf_segments) {
             if current_node.edge.len() == leaf_segments.len() {
                 return Retrieval::Exact {
@@ -88,8 +91,8 @@ impl<'p, Path, Val, Rad: Radix<'p, Path>> Trie<'p, Path, Val, Rad> {
         }
     }
 
-    pub fn get(&self, path: &'p Path) -> Option<&Val> {
-        let path_edge: Edge<Rad::Segment> = self.radix.segment(path).collect();
+    pub fn get(&self, path: &'k K) -> Option<&V> {
+        let path_edge: Edge<E::Segment> = self.encoder.segment(path).collect();
         if let Retrieval::Exact { node_id } = self.retrieve(&path_edge, true) {
             self.get_node(&node_id).value.as_ref()
         } else {
@@ -97,8 +100,8 @@ impl<'p, Path, Val, Rad: Radix<'p, Path>> Trie<'p, Path, Val, Rad> {
         }
     }
 
-    pub fn insert(&mut self, path: &'p Path, value: Val) {
-        let mut path_edge: Edge<Rad::Segment> = self.radix.segment(path).collect();
+    pub fn insert(&mut self, path: &'k K, value: V) {
+        let mut path_edge: Edge<E::Segment> = self.encoder.segment(path).collect();
         match self.retrieve(&path_edge, false) {
             Retrieval::Exact { node_id } => {
                 return self.update_node(&node_id, |node| {
@@ -168,7 +171,9 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::{radix::StrRadix, value::TrieValue};
+    use crate::key::str::StrSplitter;
+    use crate::radix::vec::VecRadix;
+    use crate::value::TrieValue;
 
     #[derive(Debug, Clone, PartialEq)]
     struct Val(Rc<str>);
@@ -179,8 +184,8 @@ mod tests {
         }
     }
 
-    fn create_trie<'a>() -> Trie<'a, Rc<str>, Val, StrRadix<'a>> {
-        Trie::new(StrRadix::default())
+    fn create_trie<'k>() -> Trie<'k, Rc<str>, Val, StrSplitter<'k>, VecRadix<&'k str>> {
+        Trie::new(StrSplitter::default())
     }
 
     #[test]
