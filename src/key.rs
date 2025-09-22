@@ -9,5 +9,5 @@ where
     Self::Segment: Eq + Clone + Debug,
 {
     type Segment;
-    fn segment(&self, path: &'k K) -> impl Iterator<Item = Self::Segment>;
+    fn segment(&self, key: &'k K) -> impl Iterator<Item = Self::Segment>;
 }

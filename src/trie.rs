@@ -40,25 +40,27 @@ impl<'k, K: Debug, V: Debug, E: IntoEdge<'k, K>, R: Radix<E::Segment>> Trie<'k, 
         node_id
     }
 
-    // fn update_node(&mut self, node_id: &NodeId, f: impl FnOnce(&mut TrieNode<'k, K, V, E, R>)) {
-    //     f(&mut self.nodes[node_id.0])
-    // }
-
-    fn retrieve(&self, path_edge: &Edge<E::Segment>, exact_only: bool) -> Retrieval {
+    /// Traverses the trie and determines the status of the key.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_edge`   - A reference to pre-allocated key edge
+    /// * `exact_only` - A flag that slightly improves performance by restricting return value
+    ///                  to `Retrieval::Exact` or `Retrieval::Prefix` in all other cases.
+    ///
+    /// Important: By design, this function does not allocate any new edges,
+    ///            because it is used both for reads and writes.
+    fn retrieve(&self, key_edge: &Edge<E::Segment>, exact_only: bool) -> Retrieval {
         let mut current_node_id = NodeId(0);
         let mut current_node = self.root();
-        let mut leaf_segments: &[_] = path_edge.borrow();
+        let mut leaf_segments: &[_] = key_edge.borrow();
         let mut depth = current_node.edge.len();
         while !leaf_segments.is_empty() && current_node.edge.is_prefix_of(leaf_segments) {
             if current_node.edge.len() == leaf_segments.len() {
                 return Retrieval::Exact(current_node_id);
             }
-            leaf_segments = &leaf_segments[current_node.edge.len()..];
-            let desc_id = match current_node.route(&leaf_segments[0]) {
-                Some(desc_id) => {
-                    leaf_segments = &leaf_segments[1..];
-                    *desc_id
-                }
+            let desc_id = match current_node.route(&mut leaf_segments) {
+                Some(desc_id) => *desc_id,
                 None => break,
             };
             let desc_node = self.get_node(&desc_id);
@@ -72,13 +74,13 @@ impl<'k, K: Debug, V: Debug, E: IntoEdge<'k, K>, R: Radix<E::Segment>> Trie<'k, 
             }
             let common_prefix_len = desc_node.edge.common_prefix_len(leaf_segments);
             if common_prefix_len == leaf_segments.len() {
-                return Retrieval::Descendant {
+                return Retrieval::Split {
                     ancestor_id: current_node_id,
                     desc_id,
                     depth,
                 };
             } else {
-                return Retrieval::Diverging {
+                return Retrieval::Divergence {
                     ancestor_id: current_node_id,
                     sibling_id: desc_id,
                     depth,
@@ -89,45 +91,45 @@ impl<'k, K: Debug, V: Debug, E: IntoEdge<'k, K>, R: Radix<E::Segment>> Trie<'k, 
         if leaf_segments.is_empty() {
             Retrieval::Exact(current_node_id)
         } else {
-            Retrieval::Ancestor {
+            Retrieval::Prefix {
                 ancestor_id: current_node_id,
                 depth,
             }
         }
     }
 
-    pub fn get(&self, path: &'k K) -> Option<&V> {
-        let path_edge: Edge<E::Segment> = self.encoder.segment(path).collect();
-        if let Retrieval::Exact(node_id) = self.retrieve(&path_edge, true) {
+    pub fn get(&self, key: &'k K) -> Option<&V> {
+        let key_edge: Edge<E::Segment> = self.encoder.segment(key).collect();
+        if let Retrieval::Exact(node_id) = self.retrieve(&key_edge, true) {
             self.get_node(&node_id).value.as_ref()
         } else {
             None
         }
     }
 
-    pub fn insert(&mut self, path: &'k K, value: V) {
-        let mut path_edge: Edge<E::Segment> = self.encoder.segment(path).collect();
-        match self.retrieve(&path_edge, false) {
+    pub fn insert(&mut self, key: &'k K, value: V) {
+        let mut key_edge: Edge<E::Segment> = self.encoder.segment(key).collect();
+        match self.retrieve(&key_edge, false) {
             Retrieval::Exact(node_id) => {
                 let node = self.get_node_mut(&node_id);
                 node.value = Some(value);
             }
-            Retrieval::Ancestor { ancestor_id, depth } => {
-                path_edge.remove_prefix(depth);
-                let route_segment = path_edge.remove_prefix(1).take_first();
-                let leaf = TrieNode::new(path_edge, Some(value));
+            Retrieval::Prefix { ancestor_id, depth } => {
+                key_edge.remove_prefix(depth);
+                let route_segment = key_edge.remove_prefix(1).take_first();
+                let leaf = TrieNode::new(key_edge, Some(value));
                 let leaf_id = self.insert_node(leaf);
                 let ancestor = self.get_node_mut(&ancestor_id);
                 ancestor.insert_edge(route_segment, leaf_id)
             }
-            Retrieval::Descendant {
+            Retrieval::Split {
                 ancestor_id,
                 desc_id,
                 depth,
             } => {
-                path_edge.remove_prefix(depth);
-                let leaf_route_segment = path_edge.remove_prefix(1).take_first();
-                let mut leaf = TrieNode::new(path_edge, Some(value));
+                key_edge.remove_prefix(depth);
+                let leaf_route_segment = key_edge.remove_prefix(1).take_first();
+                let mut leaf = TrieNode::new(key_edge, Some(value));
                 let desc = self.get_node_mut(&desc_id);
                 let desc_route_segment = desc.edge.remove_prefix(1).take_first();
                 leaf.insert_edge(desc_route_segment, desc_id);
@@ -136,20 +138,20 @@ impl<'k, K: Debug, V: Debug, E: IntoEdge<'k, K>, R: Radix<E::Segment>> Trie<'k, 
                 // Replace descendant with the leaf node
                 ancestor.insert_edge(leaf_route_segment, leaf_id);
             }
-            Retrieval::Diverging {
+            Retrieval::Divergence {
                 ancestor_id,
                 sibling_id,
                 depth,
                 common_len,
             } => {
-                path_edge.remove_prefix(depth);
-                let mut branch_edge = path_edge.remove_prefix(common_len);
+                key_edge.remove_prefix(depth);
+                let mut branch_edge = key_edge.remove_prefix(common_len);
                 let branch_route_segment = branch_edge.remove_prefix(1).take_first();
                 let mut branch = TrieNode::new(branch_edge, None);
                 let sibling = self.get_node_mut(&sibling_id);
                 let sibling_route_segment = sibling.edge.remove_prefix(1).take_first();
-                let leaf_route_segment = path_edge.remove_prefix(1).take_first();
-                let leaf = TrieNode::new(path_edge, Some(value));
+                let leaf_route_segment = key_edge.remove_prefix(1).take_first();
+                let leaf = TrieNode::new(key_edge, Some(value));
                 branch.insert_edge(sibling_route_segment, sibling_id);
                 let leaf_id = self.insert_node(leaf);
                 branch.insert_edge(leaf_route_segment, leaf_id);
@@ -175,7 +177,7 @@ mod tests {
     struct Val(Rc<str>);
 
     impl<'v> TrieValue<'v, &'v Rc<str>> for Val {
-        fn trie_path(&'v self) -> &'v Rc<str> {
+        fn trie_key(&'v self) -> &'v Rc<str> {
             &self.0
         }
     }
@@ -187,25 +189,31 @@ mod tests {
     #[test]
     fn retrieve_exact() {
         let mut t = create_trie();
-        let a = Val(Rc::from("/a"));
-        let key = a.trie_path();
-        t.insert(key, a.clone());
-        let edge = t.encoder.segment(key).collect();
-        assert_eq!(t.retrieve(&edge, true), Retrieval::Exact(NodeId(1)));
-        assert_eq!(t.retrieve(&edge, false), Retrieval::Exact(NodeId(1)));
+        let a = Val(Rc::from("/a/b"));
+        let b = Val(Rc::from("/a/b/c"));
+        let a_key = a.trie_key();
+        let b_key = b.trie_key();
+        t.insert(a_key, a.clone());
+        t.insert(b_key, b.clone());
+        let key_edge_a = t.encoder.segment(a_key).collect();
+        assert_eq!(t.retrieve(&key_edge_a, true), Retrieval::Exact(NodeId(1)));
+        assert_eq!(t.retrieve(&key_edge_a, false), Retrieval::Exact(NodeId(1)));
+        let key_edge_b = t.encoder.segment(b_key).collect();
+        assert_eq!(t.retrieve(&key_edge_b, true), Retrieval::Exact(NodeId(2)));
+        assert_eq!(t.retrieve(&key_edge_b, false), Retrieval::Exact(NodeId(2)));
     }
 
     #[test]
     fn retrieve_ancestor() {
         let mut t = create_trie();
         let a = Val(Rc::from("/a/b"));
-        let key = a.trie_path();
+        let key = a.trie_key();
         t.insert(key, a.clone());
         let nested_key = Rc::from("/a/b/c");
         let edge = t.encoder.segment(&nested_key).collect();
         assert_eq!(
             t.retrieve(&edge, false),
-            Retrieval::Ancestor {
+            Retrieval::Prefix {
                 ancestor_id: NodeId(1),
                 depth: 2
             }
@@ -217,13 +225,13 @@ mod tests {
         let mut t = create_trie();
         let a = Val(Rc::from("/a"));
         let c = Val(Rc::from("/a/b/c"));
-        t.insert(a.trie_path(), a.clone());
-        t.insert(c.trie_path(), c.clone());
+        t.insert(a.trie_key(), a.clone());
+        t.insert(c.trie_key(), c.clone());
         let nested_key = Rc::from("/a/b");
         let edge = t.encoder.segment(&nested_key).collect();
         assert_eq!(
             t.retrieve(&edge, false),
-            Retrieval::Descendant {
+            Retrieval::Split {
                 ancestor_id: NodeId(1),
                 desc_id: NodeId(2),
                 depth: 1
@@ -235,12 +243,12 @@ mod tests {
     fn retrieve_diverging() {
         let mut t = create_trie();
         let a = Val(Rc::from("/a/b/x"));
-        t.insert(a.trie_path(), a.clone());
+        t.insert(a.trie_key(), a.clone());
         let nested_key = Rc::from("/a/b/y");
         let edge = t.encoder.segment(&nested_key).collect();
         assert_eq!(
             t.retrieve(&edge, false),
-            Retrieval::Diverging {
+            Retrieval::Divergence {
                 ancestor_id: NodeId(0),
                 sibling_id: NodeId(1),
                 depth: 0,
@@ -253,7 +261,7 @@ mod tests {
     fn basic_insert() {
         let mut t = create_trie();
         let a = Val(Rc::from("/a"));
-        let key = a.trie_path();
+        let key = a.trie_key();
         t.insert(key, a.clone());
         assert_eq!(t.get(key), Some(&a));
     }
@@ -262,9 +270,9 @@ mod tests {
     fn nested_insert() {
         let mut t = create_trie();
         let a = Val(Rc::from("/a/b"));
-        let a_key = a.trie_path();
+        let a_key = a.trie_key();
         let b = Val(Rc::from("/a/b/c"));
-        let b_key = b.trie_path();
+        let b_key = b.trie_key();
         t.insert(a_key, a.clone());
         t.insert(b_key, b.clone());
         assert_eq!(t.get(a_key), Some(&a));
@@ -277,9 +285,9 @@ mod tests {
         let a = Val(Rc::from("/a"));
         let c = Val(Rc::from("/a/b/c"));
         let x = Val(Rc::from("/a/b/x"));
-        let a_key = a.trie_path();
-        let c_key = c.trie_path();
-        let x_key = x.trie_path();
+        let a_key = a.trie_key();
+        let c_key = c.trie_key();
+        let x_key = x.trie_key();
         t.insert(a_key, a.clone());
         t.insert(c_key, c.clone());
         t.insert(x_key, x.clone());
@@ -294,9 +302,9 @@ mod tests {
         let a = Val(Rc::from("/a"));
         let c = Val(Rc::from("/a/b/c"));
         let b = Val(Rc::from("/a/b"));
-        let a_key = a.trie_path();
-        let c_key = c.trie_path();
-        let b_key = b.trie_path();
+        let a_key = a.trie_key();
+        let c_key = c.trie_key();
+        let b_key = b.trie_key();
         t.insert(a_key, a.clone());
         t.insert(c_key, c.clone());
         t.insert(b_key, b.clone());

@@ -3,8 +3,18 @@ use std::fmt::Debug;
 use super::Radix;
 use crate::node::NodeId;
 
-#[derive(Debug)]
 pub struct VecRadix<Segment>(Vec<(Segment, NodeId)>);
+
+impl<Segment: Debug> Debug for VecRadix<Segment> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "VecRadix ")?;
+        let mut m = f.debug_map();
+        for (segment, node_id) in self.0.iter() {
+            m.entry(segment, node_id);
+        }
+        m.finish()
+    }
+}
 
 impl<Segment> Default for VecRadix<Segment> {
     fn default() -> Self {

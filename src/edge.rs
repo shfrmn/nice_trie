@@ -51,8 +51,8 @@ impl<Segment> Borrow<[Segment]> for Edge<Segment> {
 }
 
 impl<Segment> FromIterator<Segment> for Edge<Segment> {
-    fn from_iter<P: IntoIterator<Item = Segment>>(path_iter: P) -> Self {
-        Edge(path_iter.into_iter().collect())
+    fn from_iter<E: IntoIterator<Item = Segment>>(edge_iter: E) -> Self {
+        Edge(edge_iter.into_iter().collect())
     }
 }
 
