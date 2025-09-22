@@ -4,7 +4,7 @@ use crate::edge::Edge;
 use crate::key::IntoEdge;
 use crate::radix::Radix;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(pub usize);
 
 impl Debug for NodeId {

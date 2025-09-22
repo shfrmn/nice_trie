@@ -16,6 +16,10 @@ impl<Segment: Eq> Edge<Segment> {
         &self.0[0]
     }
 
+    pub fn take_first(self) -> Segment {
+        self.0.into_iter().next().unwrap()
+    }
+
     pub fn common_prefix_len(&self, edge_like: &[Segment]) -> usize {
         let mut edge_iter = edge_like.into_iter();
         let mut prefix_len = 0;

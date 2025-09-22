@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::hash::Hash;
 
 use crate::node::NodeId;
@@ -14,7 +15,7 @@ impl<Segment> Default for HashMapRadix<Segment> {
     }
 }
 
-impl<Segment: Eq + Hash> Radix<Segment> for HashMapRadix<Segment> {
+impl<Segment: Eq + Hash + Debug> Radix<Segment> for HashMapRadix<Segment> {
     fn get(&self, segment: &Segment) -> Option<&NodeId> {
         self.0.get(segment)
     }

@@ -1,9 +1,9 @@
 use crate::node::NodeId;
 
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Retrieval {
     /// Example: Searching for /a/b/c, found /a/b/c
-    Exact { node_id: NodeId },
+    Exact(NodeId),
 
     /// Example: Searching for /a/b/c, found /a/b
     Ancestor { ancestor_id: NodeId, depth: usize },

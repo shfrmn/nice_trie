@@ -8,7 +8,7 @@ Compressed radix trie implementation in rust (also known as compact prefix tree)
 
 - Polymorphic on radix algorithm, choose whichever is best for your use case or write your own.
 - Stores nodes in a single vector for better cache locality.
-- TODO: Only allocates each edge segment once.
+- Only allocates each edge segment once.
 - Fully generic in terms of keys and values.
 - Supports update operations.
 - Efficiently converts between external/internal key representations.
